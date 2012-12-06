@@ -1,17 +1,21 @@
 package lab2;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
+import static org.hamcrest.CoreMatchers.*;
 
 import java.math.BigDecimal;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.Test;
 import org.laughingpanda.beaninject.Inject;
+import org.mockito.ArgumentCaptor;
 
 public class InvoiceRowGeneratorTest {
 
@@ -41,12 +45,40 @@ public class InvoiceRowGeneratorTest {
         makeNewGenerator();
 
         generator.generateRowsFor(10, asDate("2012-02-15"), asDate("2012-04-02"));
-
-        verify(invoiceRowDao, atMost(1)).save(argThat(getMatcherForDate("2012-02-15")));
-        verify(invoiceRowDao, atMost(1)).save(argThat(getMatcherForDate("2012-03-01")));
-        verify(invoiceRowDao, atMost(1)).save(argThat(getMatcherForDate("2012-04-01")));
+        
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2012-02-15")));
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2012-03-01")));
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2012-04-01")));
         verifyNoMoreInteractions(invoiceRowDao);
     }
+    
+    @Test // - osamake summa EI tuleks väiksem kui 3 EUR-i.
+    public void paymentAmountNotBelowMinimum() throws Exception {
+        makeNewGenerator();
+
+        generator.generateRowsFor(14, asDate("2011-12-15"), asDate("2012-04-02"));
+        
+        ArgumentCaptor<InvoiceRow> amountsCaptor = ArgumentCaptor.forClass(InvoiceRow.class);
+		verify(invoiceRowDao, atLeast(1)).save(amountsCaptor.capture());
+
+		List<InvoiceRow> capturedAmounts = amountsCaptor.getAllValues();
+		for (InvoiceRow row : capturedAmounts){
+			assertTrue(row.amount.compareTo(new BigDecimal(3)) >= 0);
+		}
+    }
+    
+    @Test // - kuupäevade kontroll osamaksete koondumisel
+    public void paymentDatesAreCorrectWhenAmountsBelowMinimum() throws Exception {
+        makeNewGenerator();
+
+        generator.generateRowsFor(14, asDate("2011-12-15"), asDate("2012-04-02"));
+        
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2011-12-15")));
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2012-02-01")));
+        verify(invoiceRowDao).save(argThat(getMatcherForDate("2012-04-01")));
+        verifyNoMoreInteractions(invoiceRowDao);
+    }
+    
 
     private Matcher<InvoiceRow> getMatcherForSum(final BigDecimal bigDecimal) {
         return new BaseMatcher<InvoiceRow>() {
@@ -58,7 +90,7 @@ public class InvoiceRowGeneratorTest {
 
             @Override
             public void describeTo(Description description) {
-                description.appendText("Values do not match.");
+                description.appendText("Amounts do not match.");
             }
         };
     }
@@ -73,7 +105,7 @@ public class InvoiceRowGeneratorTest {
 
             @Override
             public void describeTo(Description description) {
-                description.appendText("Values do not match.");
+                description.appendText("Dates do not match.");
             }
         };
     }
